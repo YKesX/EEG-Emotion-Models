@@ -3,7 +3,8 @@
 # 🧠 EEG Emotion Recognition Models
 
 _A Research Tool for Brainwave-Based Emotion Analysis_
-Emotion recognition DL/ML models for EEG and multimodal variations. Currently only for DREAMER dataset.
+
+Emotion recognition DL/ML models for EEG and multimodal variations. Currently only for DREAMER dataset. Uses LOGO.
 This open-source project blends computational neuroscience and machine learning to identify human emotional states from EEG data. Built with a focus on transparency, reproducibility, and modular experimentation.
 
 ---
