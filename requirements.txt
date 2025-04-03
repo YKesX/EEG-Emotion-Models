@@ -1,0 +1,9 @@
+# requirements.txt
+numpy
+pandas
+scipy
+scikit-learn
+tensorflow>=2.5.0
+spektral
+torch>=1.8.0
+matplotlib
