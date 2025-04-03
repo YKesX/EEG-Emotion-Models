@@ -1,0 +1,15 @@
+EG Emotion Recognition Models – Commercial License
+
+This software is dual-licensed.
+
+You may use this software under the terms of the GNU General Public License v3 (GPLv3) as described in the LICENSE file. Alternatively, commercial licenses are available for companies, institutions, or individuals who wish to:
+
+- Use the software in closed-source applications or products
+- Avoid the requirements of the GPLv3 (e.g., disclosing source code)
+- Gain patent use rights (if applicable)
+- Obtain professional support or custom integrations
+
+For commercial licensing options, please contact:
+
+[Yağızhan Keskin]  
+Email: yagizhankeskin91@protonmail.com  
