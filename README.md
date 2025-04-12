@@ -40,7 +40,7 @@ python AIOtensorflow.py / python AIOpytorch.py
 
 ## ✅ To Do
 
-- [ ]🚧 Adding GUI(currently very limited)
+- [ ] 🚧Adding GUI(WIP, currently very limited)
 - [ ] Adding in selection for which model to train
 - [ ] Add more modalities(need more datasets)
 - [ ] Real-Time EEG analysis
