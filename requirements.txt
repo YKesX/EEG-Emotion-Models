@@ -7,3 +7,4 @@ tensorflow>=2.5.0
 spektral
 torch>=1.8.0
 matplotlib
+PyQt5>=5.15.0
