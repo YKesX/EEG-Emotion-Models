@@ -3,6 +3,7 @@ import sys
 import numpy as np
 import pandas as pd
 import random
+import argparse
 
 # Feat. Extraction
 from scipy.io import loadmat
@@ -1203,14 +1204,41 @@ def hyperparameter_tuning_dl(modality, feat_method, emotion_type):
 ###############################################
 # 10. Main Loop with Full Grid Search & Logging
 ###############################################
-def main():
-    results = []
-    modalities = ["EEG only", "Multimodal"]  
-    feat_methods = ["Welch", "FFT"]  
-    bands_dict = {
-        "EEG only": ['delta','theta','alpha', 'beta','gamma','overall'],
-        "Multimodal": ['overall']
-    }
+def main(args=None):
+    # Parse command line arguments if provided
+    if args is not None:
+        modality = "EEG only" if args.modality == "eeg_only" else "Multimodal"
+        feat_method = args.feat_method.upper()
+        bands = args.bands.split(',')
+        output_file = args.output
+
+        # Validate modality and band combinations
+        if modality == "Multimodal" and any(band != "overall" for band in bands):
+            print("Warning: For Multimodal, only 'overall' band is supported. Ignoring other bands.")
+            bands = ["overall"]
+
+        print(f"Running with modality: {modality}, feature method: {feat_method}")
+        print(f"Selected bands: {', '.join(bands)}")
+        print(f"Results will be saved to: {output_file}")
+
+        results = []
+        modalities = [modality]
+        feat_methods = [feat_method]
+        bands_dict = {
+            "EEG only": bands,
+            "Multimodal": ["overall"]
+        }
+    else:
+        # Use default configuration for complete run
+        results = []
+        modalities = ["EEG only", "Multimodal"]  
+        feat_methods = ["Welch", "FFT"]  
+        bands_dict = {
+            "EEG only": ['delta','theta','alpha', 'beta','gamma','overall'],
+            "Multimodal": ['overall']
+        }
+        output_file = "pytorch_results.txt"
+
     emotion_types = ["Valence","Arousal", "Dominance", "Targeted"]  
     model_names = ["SVM", "RF", "Decision Tree", "CNN", "FCNN", "FCNN+Attention", "Domain-Adversarial Fuzzy", "GraphCNN"]
 
@@ -1264,12 +1292,26 @@ def main():
 # Redirect output to both terminal and result.txt
 #################################################
 if __name__ == '__main__':
-    f = open("pytorch_results.txt", "w")
+    # Parse command-line arguments
+    parser = argparse.ArgumentParser(description='EEG Emotion Recognition with PyTorch')
+    parser.add_argument('--modality', choices=['eeg_only', 'multimodal'], 
+                        default='eeg_only', help='Modality to use (eeg_only or multimodal)')
+    parser.add_argument('--feat_method', choices=['fft', 'welch'],
+                        default='fft', help='Feature extraction method (fft or welch)')
+    parser.add_argument('--bands', type=str, default='overall', 
+                        help='Comma-separated list of bands to use (delta,theta,alpha,beta,gamma,overall)')
+    parser.add_argument('--output', type=str, default='pytorch_results.txt',
+                        help='Output file path for results')
+    
+    args = parser.parse_args()
+    
+    # Open output file and redirect stdout
+    f = open(args.output, "w")
     sys.stdout = Tee(sys.stdout, f)
-    # Run the main loop (if not already executed)
-    main()   # (The above loop is executed on script run)
-    # For hyperparameter tuning (on dl models, parameters can be changed)
-    # The tuning function goes through all the bands, and it does not include normal CNN
-    #hyperparameter_tuning_dl(modality="EEG only", feat_method="FFT", emotion_type="Targeted")
+    
+    # Run the main loop with arguments
+    main(args)
+    
+    # Restore stdout and close file
     sys.stdout = sys.__stdout__
     f.close()
