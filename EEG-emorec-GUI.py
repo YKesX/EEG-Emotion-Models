@@ -5,7 +5,10 @@
 EEG Emotion Recognition Models GUI Application
 This application provides a graphical interface to:
 - Select between TensorFlow and PyTorch implementations
-- Choose an output directory for results
+- Choose modality (EEG only or Multimodal, or both)
+- Choose feature extraction method (FFT or Welch, or both)
+- Select frequency bands (delta, theta, alpha, beta, gamma, overall)
+- Specify an output file path for results
 - Monitor script execution in real-time
 - Start and cancel script execution
 """
@@ -17,7 +20,8 @@ import threading
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QRadioButton, QButtonGroup, QPushButton, QLabel, QLineEdit,
-    QTextEdit, QFileDialog, QGroupBox, QProgressBar, QMessageBox, QStatusBar
+    QTextEdit, QFileDialog, QGroupBox, QProgressBar, QMessageBox, QStatusBar,
+    QCheckBox
 )
 from PyQt5.QtCore import QObject, pyqtSignal, pyqtSlot, Qt, QEvent
 from PyQt5.QtGui import QFont, QTextCursor
@@ -75,16 +79,57 @@ class Executor(QMainWindow):
         framework_layout.addWidget(self.pytorch_radio)
         framework_group.setLayout(framework_layout)
         
-        # Output directory selection
-        output_group = QGroupBox("Output Directory")
+        # Modality selection group - changed to checkboxes to allow multi-selection
+        modality_group = QGroupBox("Modality Selection")
+        modality_layout = QHBoxLayout()
+        
+        self.eeg_only_check = QCheckBox("EEG only")
+        self.multimodal_check = QCheckBox("Multimodal")
+        self.eeg_only_check.setChecked(True)  # Default to EEG only
+        
+        modality_layout.addWidget(self.eeg_only_check)
+        modality_layout.addWidget(self.multimodal_check)
+        modality_group.setLayout(modality_layout)
+        
+        # Feature extraction method selection group - changed to checkboxes
+        feature_method_group = QGroupBox("Feature Extraction Method")
+        feature_method_layout = QHBoxLayout()
+        
+        self.fft_check = QCheckBox("FFT")
+        self.welch_check = QCheckBox("Welch")
+        self.fft_check.setChecked(True)  # Default to FFT
+        
+        feature_method_layout.addWidget(self.fft_check)
+        feature_method_layout.addWidget(self.welch_check)
+        feature_method_group.setLayout(feature_method_layout)
+        
+        # Frequency band selection group
+        band_group = QGroupBox("Frequency Band Selection")
+        band_layout = QVBoxLayout()
+        
+        self.band_checkboxes = {}
+        bands = ["delta", "theta", "alpha", "beta", "gamma", "overall"]
+        
+        for band in bands:
+            checkbox = QCheckBox(band)
+            if band == "overall":
+                checkbox.setChecked(True)  # Default to overall
+            self.band_checkboxes[band] = checkbox
+            band_layout.addWidget(checkbox)
+        
+        band_group.setLayout(band_layout)
+        
+        # Output file selection
+        output_group = QGroupBox("Output File")
         output_layout = QHBoxLayout()
         
         self.output_path = QLineEdit()
-        default_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "results")
-        self.output_path.setText(default_path)
+        default_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "results")
+        default_file = os.path.join(default_dir, "results.txt")
+        self.output_path.setText(default_file)
         
         browse_button = QPushButton("Browse...")
-        browse_button.clicked.connect(self.browse_directory)
+        browse_button.clicked.connect(self.browse_file)
         
         output_layout.addWidget(self.output_path)
         output_layout.addWidget(browse_button)
@@ -127,6 +172,9 @@ class Executor(QMainWindow):
         
         # Add components to main layout
         main_layout.addWidget(framework_group)
+        main_layout.addWidget(modality_group)
+        main_layout.addWidget(feature_method_group)
+        main_layout.addWidget(band_group)
         main_layout.addWidget(output_group)
         main_layout.addWidget(terminal_group)
         main_layout.addWidget(self.progress_bar)
@@ -150,12 +198,13 @@ class Executor(QMainWindow):
         # Show the main window
         self.show()
     
-    def browse_directory(self):
-        directory = QFileDialog.getExistingDirectory(
-            self, "Select Output Directory", self.output_path.text())
-        if directory:
-            self.output_path.setText(directory)
-            self.statusBar.showMessage(f'Output directory set to {directory}')
+    def browse_file(self):
+        file_path, _ = QFileDialog.getSaveFileName(
+            self, "Select Output File", self.output_path.text(),
+            "Text Files (*.txt);;All Files (*)")
+        if file_path:
+            self.output_path.setText(file_path)
+            self.statusBar.showMessage(f'Output file set to {file_path}')
     
     @pyqtSlot(str)
     def update_terminal(self, text):
@@ -164,16 +213,55 @@ class Executor(QMainWindow):
         self.terminal.insertPlainText(text)
         self.terminal.moveCursor(QTextCursor.End)
     
+    def get_selected_modalities(self):
+        """Get the list of selected modalities."""
+        modalities = []
+        if self.eeg_only_check.isChecked():
+            modalities.append("eeg_only")
+        if self.multimodal_check.isChecked():
+            modalities.append("multimodal")
+        return modalities
+    
+    def get_selected_feature_methods(self):
+        """Get the list of selected feature extraction methods."""
+        methods = []
+        if self.fft_check.isChecked():
+            methods.append("fft")
+        if self.welch_check.isChecked():
+            methods.append("welch")
+        return methods
+    
+    def get_selected_bands(self):
+        """Get the list of selected frequency bands."""
+        return [band for band, checkbox in self.band_checkboxes.items() if checkbox.isChecked()]
+    
     def start_script(self):
         """Start execution of the selected script."""
         if self.running:
             return
         
-        # Get selected framework and output path
+        # Get selected options
         framework = "tensorflow" if self.tf_radio.isChecked() else "pytorch"
-        output_dir = self.output_path.text()
+        modalities = self.get_selected_modalities()
+        feature_methods = self.get_selected_feature_methods()
+        selected_bands = self.get_selected_bands()
+        output_file = self.output_path.text()
+        
+        # Validation checks
+        if not modalities:
+            QMessageBox.warning(self, "Warning", "Please select at least one modality.")
+            return
+        
+        if not feature_methods:
+            QMessageBox.warning(self, "Warning", "Please select at least one feature extraction method.")
+            return
+        
+        if len(selected_bands) == 0:
+            QMessageBox.warning(self, "Warning", "Please select at least one frequency band.")
+            return
         
         # Ensure output directory exists
+        output_dir = os.path.dirname(output_file)
         try:
             os.makedirs(output_dir, exist_ok=True)
         except OSError as e:
@@ -194,7 +282,10 @@ class Executor(QMainWindow):
         # Clear terminal and update UI
         self.terminal.clear()
         self.terminal.append(f"Starting {framework.capitalize()} implementation...\n")
-        self.terminal.append(f"Output will be saved to: {output_dir}\n\n")
+        self.terminal.append(f"Modalities: {', '.join(m.replace('_', ' ').title() for m in modalities)}\n")
+        self.terminal.append(f"Feature methods: {', '.join(m.upper() for m in feature_methods)}\n")
+        self.terminal.append(f"Selected bands: {', '.join(selected_bands)}\n")
+        self.terminal.append(f"Output will be saved to: {output_file}\n\n")
         
         # Update UI state
         self.start_button.setEnabled(False)
@@ -207,22 +298,38 @@ class Executor(QMainWindow):
         sys.stdout = self.stdout_redirector
         sys.stderr = self.stderr_redirector
         
-        # Start execution in a separate thread
-        self.execution_thread = threading.Thread(
-            target=self.run_script, 
-            args=(script_path, output_dir)
-        )
-        self.execution_thread.daemon = True
-        self.execution_thread.start()
+        # Start execution in a separate thread for each combination
+        self.execution_threads = []
+        
+        for modality in modalities:
+            for feat_method in feature_methods:
+                # Create a unique output file name based on the combination
+                base_filename, extension = os.path.splitext(output_file)
+                combination_output = f"{base_filename}_{modality}_{feat_method}{extension}"
+                
+                thread = threading.Thread(
+                    target=self.run_script, 
+                    args=(script_path, combination_output, modality, feat_method, selected_bands)
+                )
+                thread.daemon = True
+                self.execution_threads.append(thread)
+                thread.start()
+                
+                # Log the start of this specific combination
+                self.terminal.append(f"Starting combination: {modality} + {feat_method} -> {combination_output}\n")
     
-    def run_script(self, script_path, output_dir):
+    def run_script(self, script_path, output_file, modality, feat_method, selected_bands):
         """Execute the script in a subprocess."""
         try:
-            # Create output file path
-            output_file = os.path.join(output_dir, "results.txt")
-            
-            # Prepare the command
-            cmd = [sys.executable, script_path]
+            # Prepare the command with additional arguments
+            cmd = [
+                sys.executable, 
+                script_path,
+                "--modality", modality,
+                "--feat_method", feat_method,
+                "--bands", ",".join(selected_bands),
+                "--output", output_file
+            ]
             
             # Execute the script
             self.process = subprocess.Popen(
@@ -244,19 +351,23 @@ class Executor(QMainWindow):
             
             return_code = self.process.wait()
             if return_code == 0:
-                self.update_status("Script completed successfully")
+                self.update_status(f"Script completed successfully: {os.path.basename(output_file)}")
             else:
-                self.update_status(f"Script exited with code {return_code}")
+                self.update_status(f"Script exited with code {return_code}: {os.path.basename(output_file)}")
                 
         except Exception as e:
             self.update_status(f"Error: {str(e)}")
         finally:
-            # Reset stdout/stderr
-            sys.stdout = self.original_stdout
-            sys.stderr = self.original_stderr
-            
-            # Update UI state
-            self.update_ui_after_execution()
+            # Check if all threads are completed
+            active_threads = [t for t in self.execution_threads if t.is_alive()]
+            if not active_threads:
+                # Reset stdout/stderr only when all threads are done
+                sys.stdout = self.original_stdout
+                sys.stderr = self.original_stderr
+                
+                # Update UI state
+                self.update_ui_after_execution()
+    
     def update_status(self, message):
         """Update status bar with message (thread-safe)."""
         QApplication.postEvent(self, 
@@ -284,7 +395,10 @@ class Executor(QMainWindow):
         self.running = False
         
     def event(self, event):
-        if event.type() == UIUpdateEvent.EVENT_TYPE:
+        if hasattr(event, 'type') and event.type() == StatusUpdateEvent.EVENT_TYPE:
+            self.statusBar.showMessage(event.message)
+            return True
+        elif hasattr(event, 'type') and event.type() == UIUpdateEvent.EVENT_TYPE:
             self.handle_ui_update()
             return True
         return super().event(event)
@@ -292,6 +406,9 @@ class Executor(QMainWindow):
     def customEvent(self, event):
         if event.type() == UIUpdateEvent.EVENT_TYPE:
             self.handle_ui_update()
+            return True
+        if event.type() == StatusUpdateEvent.EVENT_TYPE:
+            self.statusBar.showMessage(event.message)
             return True
         return super().customEvent(event)
     
