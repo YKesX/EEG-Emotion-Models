@@ -1,4 +1,17 @@
-# EEG-Emotion-Models
+# EEG-Emotion-Models-GUI implementation branch
+⚠️ Disclaimer
+This branch has not been tested yet, use the main branch scripts without the included GUI for the best
+results. 
+✅ To Do
+
+- [ ] 🚧Adding fully functional GUI
+- [ ] Adding in selection for which model to train
+- [ ] Add more modalities(need more datasets)
+- [ ] Add more dataset compatibility
+- [ ] Pause button(will be a lifesaver)
+- [ ] Try and make the GUI prettier
+
+----------------------------------------------------------------------
 
 # 🧠 EEG Emotion Recognition Models
 
