@@ -1,4 +1,15 @@
-# EEG-Emotion-Models
+# EEG-Emotion-Models-Lite
+This will stay as a branch for the time being,
+it might become a repository or just a release addition
+
+Essentially a text-based, optimized and smaller version of the same thing
+No output file directory change, no pause, no GUI
+Will not add real-time(might change)
+Will only support DREAMER for the time being
+
+CODE IS STILL NOT CHANGED IN THIS BRANCH
+
+-----------------------------------------------
 
 # 🧠 EEG Emotion Recognition Models
 
