@@ -1,7 +1,9 @@
 # EEG-Emotion-Models-GUI implementation branch
 ⚠️ Disclaimer
+
 This branch has not been tested yet, use the main branch scripts without the included GUI for the best
 results. 
+
 ✅ To Do
 
 - [ ] 🚧Adding fully functional GUI
