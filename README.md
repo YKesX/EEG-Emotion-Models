@@ -7,10 +7,12 @@ results.
 ✅ To Do
 
 - [ ] 🚧Adding fully functional GUI
+
 ✅ Adding in selection for which model to train
 - [ ] Add more modalities(need more datasets)
 - [ ] Add more dataset compatibility
 - [ ] Pause button(will be a lifesaver)
+
 ✅ Try and make the GUI prettier
 
 ----------------------------------------------------------------------
