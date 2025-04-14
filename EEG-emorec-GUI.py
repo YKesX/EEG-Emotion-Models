@@ -8,7 +8,8 @@ This application provides a graphical interface to:
 - Choose modality (EEG only or Multimodal, or both)
 - Choose feature extraction method (FFT or Welch, or both)
 - Select frequency bands (delta, theta, alpha, beta, gamma, overall)
-- Specify an output file path for results
+- Select models to train
+- Set preferences (dark/light mode, output file path)
 - Monitor script execution in real-time
 - Start and cancel script execution
 """
@@ -17,14 +18,169 @@ import sys
 import os
 import subprocess
 import threading
+import json
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QRadioButton, QButtonGroup, QPushButton, QLabel, QLineEdit,
     QTextEdit, QFileDialog, QGroupBox, QProgressBar, QMessageBox, QStatusBar,
-    QCheckBox
+    QCheckBox, QTabWidget, QScrollArea, QGridLayout
 )
 from PyQt5.QtCore import QObject, pyqtSignal, pyqtSlot, Qt, QEvent
-from PyQt5.QtGui import QFont, QTextCursor
+from PyQt5.QtGui import QFont, QTextCursor, QPalette, QColor
+
+
+# Stylesheet definitions for dark and light themes
+DARK_STYLE = """
+QWidget {
+    background-color: #2D2D30;
+    color: #FFFFFF;
+}
+QTabWidget::pane {
+    border: 1px solid #3E3E40;
+    background-color: #2D2D30;
+}
+QTabBar::tab {
+    background-color: #252526;
+    color: #FFFFFF;
+    padding: 8px 16px;
+    border: 1px solid #3E3E40;
+    border-bottom: none;
+    border-top-left-radius: 4px;
+    border-top-right-radius: 4px;
+}
+QTabBar::tab:selected {
+    background-color: #3E3E42;
+}
+QGroupBox {
+    border: 1px solid #3E3E40;
+    margin-top: 1ex;
+    font-weight: bold;
+}
+QGroupBox::title {
+    subcontrol-origin: margin;
+    padding: 0px 5px;
+}
+QPushButton {
+    background-color: #0E639C;
+    color: white;
+    border: none;
+    padding: 5px 10px;
+    border-radius: 3px;
+}
+QPushButton:hover {
+    background-color: #1177BB;
+}
+QPushButton:pressed {
+    background-color: #0D5A8C;
+}
+QPushButton:disabled {
+    background-color: #3E3E40;
+    color: #888888;
+}
+QLineEdit {
+    background-color: #1E1E1E;
+    color: white;
+    border: 1px solid #3E3E40;
+    padding: 5px;
+    border-radius: 3px;
+}
+QTextEdit {
+    background-color: #1E1E1E;
+    color: white;
+    border: 1px solid #3E3E40;
+}
+QCheckBox {
+    color: white;
+}
+QRadioButton {
+    color: white;
+}
+QProgressBar {
+    border: 1px solid #3E3E40;
+    border-radius: 3px;
+    text-align: center;
+    background-color: #1E1E1E;
+}
+QProgressBar::chunk {
+    background-color: #0E639C;
+}
+"""
+
+LIGHT_STYLE = """
+QWidget {
+    background-color: #F0F0F0;
+    color: #000000;
+}
+QTabWidget::pane {
+    border: 1px solid #C0C0C0;
+    background-color: #F0F0F0;
+}
+QTabBar::tab {
+    background-color: #E0E0E0;
+    color: #000000;
+    padding: 8px 16px;
+    border: 1px solid #C0C0C0;
+    border-bottom: none;
+    border-top-left-radius: 4px;
+    border-top-right-radius: 4px;
+}
+QTabBar::tab:selected {
+    background-color: #FFFFFF;
+}
+QGroupBox {
+    border: 1px solid #C0C0C0;
+    margin-top: 1ex;
+    font-weight: bold;
+}
+QGroupBox::title {
+    subcontrol-origin: margin;
+    padding: 0px 5px;
+}
+QPushButton {
+    background-color: #0078D7;
+    color: white;
+    border: none;
+    padding: 5px 10px;
+    border-radius: 3px;
+}
+QPushButton:hover {
+    background-color: #1089E7;
+}
+QPushButton:pressed {
+    background-color: #006CC7;
+}
+QPushButton:disabled {
+    background-color: #C0C0C0;
+    color: #888888;
+}
+QLineEdit {
+    background-color: white;
+    color: black;
+    border: 1px solid #C0C0C0;
+    padding: 5px;
+    border-radius: 3px;
+}
+QTextEdit {
+    background-color: white;
+    color: black;
+    border: 1px solid #C0C0C0;
+}
+QCheckBox {
+    color: black;
+}
+QRadioButton {
+    color: black;
+}
+QProgressBar {
+    border: 1px solid #C0C0C0;
+    border-radius: 3px;
+    text-align: center;
+    background-color: white;
+}
+QProgressBar::chunk {
+    background-color: #0078D7;
+}
+"""
 
 
 class StreamRedirector(QObject):
@@ -52,16 +208,68 @@ class Executor(QMainWindow):
         self.process = None
         self.execution_thread = None
         self.running = False
+        self.preferences_file = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), 
+            "eeg_emorec_preferences.json"
+        )
+        self.dark_mode = True  # Default to dark mode
+        self.selected_models = ["SVM", "RF", "Decision Tree", "CNN", "FCNN", 
+                                "FCNN+Attention", "Domain-Adversarial Fuzzy", "GraphCNN"]
+        self.output_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), 
+            "results", 
+            "results.txt"
+        )
+        self.load_preferences()
         self.initUI()
+        self.apply_theme()
         
     def initUI(self):
         self.setWindowTitle('EEG Emotion Recognition Models v1.0') 
-        self.setGeometry(100, 100, 800, 600)
+        self.setGeometry(100, 100, 900, 700)
         
-        # Main layout
-        main_widget = QWidget()
-        self.setCentralWidget(main_widget)
-        main_layout = QVBoxLayout(main_widget)
+        # Main layout with tab widget
+        self.main_widget = QWidget()
+        self.setCentralWidget(self.main_widget)
+        self.main_layout = QVBoxLayout(self.main_widget)
+        
+        self.tab_widget = QTabWidget()
+        self.main_tab = QWidget()
+        self.preferences_tab = QWidget()
+        
+        self.tab_widget.addTab(self.main_tab, "Main")
+        self.tab_widget.addTab(self.preferences_tab, "Preferences")
+        
+        # Set up the main tab
+        self.setup_main_tab()
+        
+        # Set up the preferences tab
+        self.setup_preferences_tab()
+        
+        # Add tab widget to main layout
+        self.main_layout.addWidget(self.tab_widget)
+        
+        # Status bar
+        self.statusBar = QStatusBar()
+        self.setStatusBar(self.statusBar)
+        self.statusBar.showMessage('Ready')
+        
+        # Set up stdout/stderr redirection
+        self.original_stdout = sys.stdout
+        self.original_stderr = sys.stderr
+        
+        self.stdout_redirector = StreamRedirector(self.original_stdout)
+        self.stderr_redirector = StreamRedirector(self.original_stderr)
+        
+        self.stdout_redirector.text_written.connect(self.update_terminal)
+        self.stderr_redirector.text_written.connect(self.update_terminal)
+        
+        # Show the main window
+        self.show()
+    
+    def setup_main_tab(self):
+        """Set up the main tab with all controls."""
+        main_layout = QVBoxLayout(self.main_tab)
         
         # Framework selection group
         framework_group = QGroupBox("Framework Selection")
@@ -79,7 +287,7 @@ class Executor(QMainWindow):
         framework_layout.addWidget(self.pytorch_radio)
         framework_group.setLayout(framework_layout)
         
-        # Modality selection group - changed to checkboxes to allow multi-selection
+        # Modality selection group
         modality_group = QGroupBox("Modality Selection")
         modality_layout = QHBoxLayout()
         
@@ -91,7 +299,7 @@ class Executor(QMainWindow):
         modality_layout.addWidget(self.multimodal_check)
         modality_group.setLayout(modality_layout)
         
-        # Feature extraction method selection group - changed to checkboxes
+        # Feature extraction method selection group
         feature_method_group = QGroupBox("Feature Extraction Method")
         feature_method_layout = QHBoxLayout()
         
@@ -103,9 +311,9 @@ class Executor(QMainWindow):
         feature_method_layout.addWidget(self.welch_check)
         feature_method_group.setLayout(feature_method_layout)
         
-        # Frequency band selection group
+        # Frequency band selection group - now displayed horizontally
         band_group = QGroupBox("Frequency Band Selection")
-        band_layout = QVBoxLayout()
+        band_layout = QHBoxLayout()
         
         self.band_checkboxes = {}
         bands = ["delta", "theta", "alpha", "beta", "gamma", "overall"]
@@ -119,21 +327,37 @@ class Executor(QMainWindow):
         
         band_group.setLayout(band_layout)
         
-        # Output file selection
-        output_group = QGroupBox("Output File")
-        output_layout = QHBoxLayout()
+        # Model selection group - moved from preferences to main tab
+        model_group = QGroupBox("Model Selection")
+        model_layout = QGridLayout()
         
-        self.output_path = QLineEdit()
-        default_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "results")
-        default_file = os.path.join(default_dir, "results.txt")
-        self.output_path.setText(default_file)
+        self.model_checkboxes = {}
+        models = ["SVM", "RF", "Decision Tree", "CNN", "FCNN", 
+                  "FCNN+Attention", "Domain-Adversarial Fuzzy", "GraphCNN"]
         
-        browse_button = QPushButton("Browse...")
-        browse_button.clicked.connect(self.browse_file)
+        # Grid layout with 4 models per row
+        for i, model in enumerate(models):
+            checkbox = QCheckBox(model)
+            checkbox.setChecked(model in self.selected_models)
+            checkbox.toggled.connect(self.update_model_selection)
+            self.model_checkboxes[model] = checkbox
+            row, col = divmod(i, 4)
+            model_layout.addWidget(checkbox, row, col)
         
-        output_layout.addWidget(self.output_path)
-        output_layout.addWidget(browse_button)
-        output_group.setLayout(output_layout)
+        # Select/Deselect All buttons
+        model_button_layout = QHBoxLayout()
+        select_all_button = QPushButton("Select All")
+        deselect_all_button = QPushButton("Deselect All")
+        
+        select_all_button.clicked.connect(self.select_all_models)
+        deselect_all_button.clicked.connect(self.deselect_all_models)
+        
+        model_button_layout.addWidget(select_all_button)
+        model_button_layout.addWidget(deselect_all_button)
+        
+        # Add the buttons to the grid at the bottom
+        model_layout.addLayout(model_button_layout, (len(models) + 3) // 4, 0, 1, 4)
+        model_group.setLayout(model_layout)
         
         # Terminal/console output
         terminal_group = QGroupBox("Console Output")
@@ -142,7 +366,6 @@ class Executor(QMainWindow):
         self.terminal = QTextEdit()
         self.terminal.setReadOnly(True)
         self.terminal.setFont(QFont("Courier", 10))
-        self.terminal.setStyleSheet("background-color: black; color: white;")
         
         terminal_layout.addWidget(self.terminal)
         terminal_group.setLayout(terminal_layout)
@@ -170,40 +393,137 @@ class Executor(QMainWindow):
         button_layout.addStretch(1)
         button_layout.addWidget(exit_button)
         
-        # Add components to main layout
+        # Add groups to main layout
         main_layout.addWidget(framework_group)
         main_layout.addWidget(modality_group)
         main_layout.addWidget(feature_method_group)
         main_layout.addWidget(band_group)
-        main_layout.addWidget(output_group)
+        main_layout.addWidget(model_group)
         main_layout.addWidget(terminal_group)
         main_layout.addWidget(self.progress_bar)
         main_layout.addLayout(button_layout)
+    
+    def setup_preferences_tab(self):
+        """Set up the preferences tab with theme and output file selection."""
+        preferences_layout = QVBoxLayout(self.preferences_tab)
         
-        # Status bar
-        self.statusBar = QStatusBar()
-        self.setStatusBar(self.statusBar)
-        self.statusBar.showMessage('Ready')
+        # Theme selection group
+        theme_group = QGroupBox("Theme Selection")
+        theme_layout = QHBoxLayout()
         
-        # Set up stdout/stderr redirection
-        self.original_stdout = sys.stdout
-        self.original_stderr = sys.stderr
+        self.dark_radio = QRadioButton("Dark Mode")
+        self.light_radio = QRadioButton("Light Mode")
         
-        self.stdout_redirector = StreamRedirector(self.original_stdout)
-        self.stderr_redirector = StreamRedirector(self.original_stderr)
+        # Set the selected theme based on preferences
+        if self.dark_mode:
+            self.dark_radio.setChecked(True)
+        else:
+            self.light_radio.setChecked(True)
+            
+        # Connect theme radio buttons to change theme
+        self.dark_radio.toggled.connect(self.theme_changed)
+        self.light_radio.toggled.connect(self.theme_changed)
         
-        self.stdout_redirector.text_written.connect(self.update_terminal)
-        self.stderr_redirector.text_written.connect(self.update_terminal)
+        theme_layout.addWidget(self.dark_radio)
+        theme_layout.addWidget(self.light_radio)
+        theme_group.setLayout(theme_layout)
         
-        # Show the main window
-        self.show()
+        # Output file selection - moved from main tab to preferences tab
+        output_group = QGroupBox("Output File")
+        output_layout = QHBoxLayout()
+        
+        self.output_path_field = QLineEdit()
+        self.output_path_field.setText(self.output_path)
+        
+        browse_button = QPushButton("Browse...")
+        browse_button.clicked.connect(self.browse_file)
+        
+        output_layout.addWidget(self.output_path_field)
+        output_layout.addWidget(browse_button)
+        output_group.setLayout(output_layout)
+        
+        # Save preferences button
+        save_button = QPushButton("Save Preferences")
+        save_button.clicked.connect(self.save_preferences)
+        
+        # Add groups to preferences layout
+        preferences_layout.addWidget(theme_group)
+        preferences_layout.addWidget(output_group)
+        preferences_layout.addWidget(save_button)
+        preferences_layout.addStretch(1)  # Add stretch to push everything to the top
+    
+    def theme_changed(self):
+        """Handle theme change."""
+        self.dark_mode = self.dark_radio.isChecked()
+        self.apply_theme()
+        
+    def apply_theme(self):
+        """Apply the selected theme to the application."""
+        if self.dark_mode:
+            self.setStyleSheet(DARK_STYLE)
+            # Set terminal colors for dark mode
+            self.terminal.setStyleSheet("background-color: #1E1E1E; color: white;")
+        else:
+            self.setStyleSheet(LIGHT_STYLE)
+            # Set terminal colors for light mode
+            self.terminal.setStyleSheet("background-color: white; color: black;")
+    
+    def update_model_selection(self):
+        """Update the selected models list based on checkboxes."""
+        self.selected_models = [model for model, checkbox in self.model_checkboxes.items() 
+                               if checkbox.isChecked()]
+    
+    def select_all_models(self):
+        """Select all models."""
+        for checkbox in self.model_checkboxes.values():
+            checkbox.setChecked(True)
+    
+    def deselect_all_models(self):
+        """Deselect all models."""
+        for checkbox in self.model_checkboxes.values():
+            checkbox.setChecked(False)
+    
+    def save_preferences(self):
+        """Save preferences to a JSON file."""
+        try:
+            # Update output path from the field
+            self.output_path = self.output_path_field.text()
+            
+            preferences = {
+                "dark_mode": self.dark_mode,
+                "selected_models": self.selected_models,
+                "output_path": self.output_path
+            }
+            
+            with open(self.preferences_file, 'w') as f:
+                json.dump(preferences, f)
+                
+            self.statusBar.showMessage("Preferences saved successfully")
+        except Exception as e:
+            QMessageBox.warning(self, "Error", f"Could not save preferences: {str(e)}")
+    
+    def load_preferences(self):
+        """Load preferences from JSON file if it exists."""
+        try:
+            if os.path.exists(self.preferences_file):
+                with open(self.preferences_file, 'r') as f:
+                    preferences = json.load(f)
+                
+                self.dark_mode = preferences.get("dark_mode", True)
+                self.selected_models = preferences.get("selected_models", 
+                                                      ["SVM", "RF", "Decision Tree", "CNN", "FCNN", 
+                                                       "FCNN+Attention", "Domain-Adversarial Fuzzy", "GraphCNN"])
+                self.output_path = preferences.get("output_path", self.output_path)
+        except Exception as e:
+            print(f"Error loading preferences: {str(e)}")
     
     def browse_file(self):
         file_path, _ = QFileDialog.getSaveFileName(
-            self, "Select Output File", self.output_path.text(),
+            self, "Select Output File", self.output_path_field.text(),
             "Text Files (*.txt);;All Files (*)")
         if file_path:
-            self.output_path.setText(file_path)
+            self.output_path_field.setText(file_path)
+            self.output_path = file_path
             self.statusBar.showMessage(f'Output file set to {file_path}')
     
     @pyqtSlot(str)
@@ -240,12 +560,15 @@ class Executor(QMainWindow):
         if self.running:
             return
         
+        # Make sure output path is updated from preferences tab
+        self.output_path = self.output_path_field.text()
+        
         # Get selected options
         framework = "tensorflow" if self.tf_radio.isChecked() else "pytorch"
         modalities = self.get_selected_modalities()
         feature_methods = self.get_selected_feature_methods()
         selected_bands = self.get_selected_bands()
-        output_file = self.output_path.text()
+        output_file = self.output_path
         
         # Validation checks
         if not modalities:
@@ -258,6 +581,10 @@ class Executor(QMainWindow):
         
         if len(selected_bands) == 0:
             QMessageBox.warning(self, "Warning", "Please select at least one frequency band.")
+            return
+        
+        if not self.selected_models:
+            QMessageBox.warning(self, "Warning", "Please select at least one model to train.")
             return
         
         # Ensure output directory exists
@@ -285,6 +612,7 @@ class Executor(QMainWindow):
         self.terminal.append(f"Modalities: {', '.join(m.replace('_', ' ').title() for m in modalities)}\n")
         self.terminal.append(f"Feature methods: {', '.join(m.upper() for m in feature_methods)}\n")
         self.terminal.append(f"Selected bands: {', '.join(selected_bands)}\n")
+        self.terminal.append(f"Selected models: {', '.join(self.selected_models)}\n")
         self.terminal.append(f"Output will be saved to: {output_file}\n\n")
         
         # Update UI state
@@ -328,7 +656,8 @@ class Executor(QMainWindow):
                 "--modality", modality,
                 "--feat_method", feat_method,
                 "--bands", ",".join(selected_bands),
-                "--output", output_file
+                "--output", output_file,
+                "--models", ",".join(self.selected_models)
             ]
             
             # Execute the script
@@ -428,8 +757,6 @@ class Executor(QMainWindow):
         else:
             event.accept()
 
-
-from PyQt5.QtCore import QEvent
 
 class StatusUpdateEvent(QEvent):
     """Custom event for updating status bar from another thread."""
