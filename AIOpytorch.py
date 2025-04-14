@@ -1211,6 +1211,8 @@ def main(args=None):
         feat_method = args.feat_method.upper()
         bands = args.bands.split(',')
         output_file = args.output
+        selected_models = args.models.split(',') if args.models else ["SVM", "RF", "Decision Tree", "CNN", "FCNN", 
+                                                                     "FCNN+Attention", "Domain-Adversarial Fuzzy", "GraphCNN"]
 
         # Validate modality and band combinations
         if modality == "Multimodal" and any(band != "overall" for band in bands):
@@ -1219,6 +1221,7 @@ def main(args=None):
 
         print(f"Running with modality: {modality}, feature method: {feat_method}")
         print(f"Selected bands: {', '.join(bands)}")
+        print(f"Selected models: {', '.join(selected_models)}")
         print(f"Results will be saved to: {output_file}")
 
         results = []
@@ -1228,6 +1231,7 @@ def main(args=None):
             "EEG only": bands,
             "Multimodal": ["overall"]
         }
+        model_names = selected_models
     else:
         # Use default configuration for complete run
         results = []
@@ -1238,9 +1242,9 @@ def main(args=None):
             "Multimodal": ['overall']
         }
         output_file = "pytorch_results.txt"
+        model_names = ["SVM", "RF", "Decision Tree", "CNN", "FCNN", "FCNN+Attention", "Domain-Adversarial Fuzzy", "GraphCNN"]
 
     emotion_types = ["Valence","Arousal", "Dominance", "Targeted"]  
-    model_names = ["SVM", "RF", "Decision Tree", "CNN", "FCNN", "FCNN+Attention", "Domain-Adversarial Fuzzy", "GraphCNN"]
 
     # Hyperparameter grids for classical models
     svm_grid = {'C': [0.1, 1, 10], 'gamma': [0.001, 0.01]}
@@ -1302,6 +1306,8 @@ if __name__ == '__main__':
                         help='Comma-separated list of bands to use (delta,theta,alpha,beta,gamma,overall)')
     parser.add_argument('--output', type=str, default='pytorch_results.txt',
                         help='Output file path for results')
+    parser.add_argument('--models', type=str, default='',
+                        help='Comma-separated list of models to evaluate (SVM,RF,Decision Tree,CNN,FCNN,FCNN+Attention,Domain-Adversarial Fuzzy,GraphCNN)')
     
     args = parser.parse_args()
     
