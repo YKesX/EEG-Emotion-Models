@@ -13,7 +13,7 @@ This open-source project blends computational neuroscience and machine learning 
 ## ✨ Core Capabilities
 
 - 🧠 **Frequency Band Analysis** — Goes trough all 5 different frequency bands and the overall signal.
-- 🧬 **Many Models** — SVM, RF, CNN, Fuzzy-CNN, Attention-Enhanced Fuzzy-CNN, Fuzzy Domain-Adversarial Network and GraphCNN.
+- 🧬 **Many Models** — SVM, RF, Decision Tree, CNN, Fuzzy-CNN, Attention-Enhanced Fuzzy-CNN, Fuzzy Domain-Adversarial Network and GraphCNN.
 - 📉 **Multimodal Feature Extraction** — Includes other modalities, for now only ECG.
 - 🧪 **Offline** — Analyze recorded EEG or stream from devices.
 
@@ -42,7 +42,9 @@ python AIOtensorflow.py / python AIOpytorch.py
 ## ✅ To Do
 
 ✅ Adding GUI
+
 ✅ Adding pausing ability
+
 ✅ Adding in selection for which model to train
 
 - [ ] Add more modalities(need more datasets)
