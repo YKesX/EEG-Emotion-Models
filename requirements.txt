@@ -8,3 +8,4 @@ spektral
 torch>=1.8.0
 matplotlib
 PyQt5>=5.15.0
+psutil
