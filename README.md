@@ -20,7 +20,21 @@ This open-source project blends computational neuroscience and machine learning 
 ---
 
 ## 🛠️ Installation & Usage
+Install and unpack the latest release
+(For Linux users)
+```bash
+chmod +x EEG-Emotion-Recognition.sh
+```
+(For macOS users)
+```bash
+chmod +x EEG-Emotion-Recognition.command
+```
+Then simply run your launcher script according to your operating system.
+->EEG-Emotion-Recognition.command    # For macOS
+->EEG-Emotion-Recognition.sh         # For Linux
+->EEG-Emotion-Recognition.bat        # For Windows
 
+If you want to do everything from scratch
 ```bash
 # Clone the repo
 git clone https://github.com/YKesX/EEG-Emotion-Models.git
@@ -35,9 +49,9 @@ pip install tensorflow-gpu>=2.5.0
 pip install spektral
 pip install torch>=1.8.0 torchvision>=0.9.0 torchaudio>=0.8.0 -f https://download.pytorch.org/whl/cu113/torch_stable.html
 
-# Run main pipeline(depending on your preference)
-python AIOtensorflow.py / python AIOpytorch.py
+# Run scripts/main.py
 ```
+Don't forget to select your DREAMER.mat file!!!
 
 ## ✅ To Do
 
