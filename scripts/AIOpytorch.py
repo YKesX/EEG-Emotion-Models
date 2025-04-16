@@ -1260,7 +1260,7 @@ def main(args=None):
         for feat_method in feat_methods:
             for band in bands_dict[modality]:
                 for emotion_type in emotion_types:
-                    X, y, groups, num_classes = load_and_preprocess_data(modality, feat_method, band, emotion_type)
+                    X, y, groups, num_classes = load_and_preprocess_data(modality, feat_method, band, emotion_type, args.dreamer_mat)
                     for model_name in model_names:
                         config_str = f"==={modality}, {feat_method}, {band}, {emotion_type}, {model_name}==="
                         print(config_str)
@@ -1309,6 +1309,8 @@ if __name__ == '__main__':
                         help='Output file path for results')
     parser.add_argument('--models', type=str, default='',
                         help='Comma-separated list of models to evaluate (SVM,RF,Decision Tree,CNN,FCNN,FCNN+Attention,Domain-Adversarial Fuzzy,GraphCNN)')
+    parser.add_argument('--dreamer_mat', type=str, default='DREAMER.mat',
+                        help='Path to the DREAMER.mat file')
     
     args = parser.parse_args()
     
