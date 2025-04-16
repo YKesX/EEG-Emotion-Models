@@ -3,6 +3,7 @@ import sys
 import numpy as np
 import pandas as pd
 import random
+import argparse
 
 # Feat. Extraction
 from scipy.io import loadmat
@@ -54,12 +55,12 @@ class Tee:
 # Global Configuration
 #############################################
 BANDS = {
-    'delta':   [0.5, 4],
-    'theta':   [4, 8],
-    'alpha':   [8, 13],
-    'beta':    [13, 30],
-    'gamma':   [30, 45],
-    'overall': [0.5, 45]
+    'Delta':   [0.5, 4],
+    'Theta':   [4, 8],
+    'Alpha':   [8, 13],
+    'Beta':    [13, 30],
+    'Gamma':   [30, 45],
+    'Overall': [0.5, 45]
 }
 SAMPLING_RATE_EEG = 128  # Hz
 SAMPLING_RATE_ECG = 256  # Hz (for multimodal)
@@ -188,13 +189,14 @@ def emotion_classifier(valence, arousal, dominance):
 #############################################
 # 5. Data Loading & Preprocessing
 #############################################
-def load_and_preprocess_data(modality, feat_method, band_name, emotion_type):
+def load_and_preprocess_data(modality, feat_method, band_name, emotion_type, dreamer_path='DREAMER.mat'):
     """
     Loads the DREAMER dataset and extracts features and labels.
       - modality: "EEG only" or "Multimodal" (if multimodal, only 'overall' is used)
       - feat_method: "FFT" or "Welch"
       - band_name: key from BANDS (for multimodal, only 'overall' is used)
       - emotion_type: one of "Valence", "Arousal", "Dominance", or "Targeted"
+      - dreamer_path: Path to the DREAMER.mat file
       
     For "Valence", "Arousal", and "Dominance", a median split is used to create binary labels.
     For "Targeted", the emotion_classifier is applied to obtain multi-class labels.
@@ -202,7 +204,7 @@ def load_and_preprocess_data(modality, feat_method, band_name, emotion_type):
     Iterates over all EEG channels (assumed 14) and, for ECG in multimodal mode,
     extracts features from both channels and averages them.
     """
-    data = loadmat('DREAMER.mat')
+    data = loadmat(dreamer_path)
     X_list, y_list, groups = [], [], []
     
     for p in range(NUM_PARTICIPANTS):
@@ -232,11 +234,11 @@ def load_and_preprocess_data(modality, feat_method, band_name, emotion_type):
                     stim_ch = data['DREAMER'][0,0]['Data'][0, p]['EEG'][0,0]['stimuli'][0,0][v,0][:, ch]
                     base_ch = data['DREAMER'][0,0]['Data'][0, p]['EEG'][0,0]['baseline'][0,0][v,0][:, ch]
                     if feat_method == "FFT":
-                        feat_stim = extract_features_fft(stim_ch, BANDS['overall'], SAMPLING_RATE_EEG)
-                        feat_base = extract_features_fft(base_ch, BANDS['overall'], SAMPLING_RATE_EEG)
+                        feat_stim = extract_features_fft(stim_ch, BANDS['Overall'], SAMPLING_RATE_EEG)
+                        feat_base = extract_features_fft(base_ch, BANDS['Overall'], SAMPLING_RATE_EEG)
                     else:
-                        feat_stim = extract_features_welch(stim_ch, BANDS['overall'], SAMPLING_RATE_EEG)
-                        feat_base = extract_features_welch(base_ch, BANDS['overall'], SAMPLING_RATE_EEG)
+                        feat_stim = extract_features_welch(stim_ch, BANDS['Overall'], SAMPLING_RATE_EEG)
+                        feat_base = extract_features_welch(base_ch, BANDS['Overall'], SAMPLING_RATE_EEG)
                     # Each extraction returns a 1-element array; subtract and store the scalar.
                     features_per_video.append(feat_stim[0] - feat_base[0])
                 eeg_features = np.array(features_per_video)
@@ -247,15 +249,15 @@ def load_and_preprocess_data(modality, feat_method, band_name, emotion_type):
                 if ecg_stim.ndim == 1 or ecg_stim.shape[1] == 1:
                     raise Exception("ECG data does not have two channels")
                 if feat_method == "FFT":
-                    ecg_feat_stim_l = extract_features_fft(ecg_stim[:, 0], BANDS['overall'], SAMPLING_RATE_ECG)
-                    ecg_feat_stim_r = extract_features_fft(ecg_stim[:, 1], BANDS['overall'], SAMPLING_RATE_ECG)
-                    ecg_feat_base_l = extract_features_fft(ecg_base[:, 0], BANDS['overall'], SAMPLING_RATE_ECG)
-                    ecg_feat_base_r = extract_features_fft(ecg_base[:, 1], BANDS['overall'], SAMPLING_RATE_ECG)
+                    ecg_feat_stim_l = extract_features_fft(ecg_stim[:, 0], BANDS['Overall'], SAMPLING_RATE_ECG)
+                    ecg_feat_stim_r = extract_features_fft(ecg_stim[:, 1], BANDS['Overall'], SAMPLING_RATE_ECG)
+                    ecg_feat_base_l = extract_features_fft(ecg_base[:, 0], BANDS['Overall'], SAMPLING_RATE_ECG)
+                    ecg_feat_base_r = extract_features_fft(ecg_base[:, 1], BANDS['Overall'], SAMPLING_RATE_ECG)
                 else:
-                    ecg_feat_stim_l = extract_features_welch(ecg_stim[:, 0], BANDS['overall'], SAMPLING_RATE_ECG)
-                    ecg_feat_stim_r = extract_features_welch(ecg_stim[:, 1], BANDS['overall'], SAMPLING_RATE_ECG)
-                    ecg_feat_base_l = extract_features_welch(ecg_base[:, 0], BANDS['overall'], SAMPLING_RATE_ECG)
-                    ecg_feat_base_r = extract_features_welch(ecg_base[:, 1], BANDS['overall'], SAMPLING_RATE_ECG)
+                    ecg_feat_stim_l = extract_features_welch(ecg_stim[:, 0], BANDS['Overall'], SAMPLING_RATE_ECG)
+                    ecg_feat_stim_r = extract_features_welch(ecg_stim[:, 1], BANDS['Overall'], SAMPLING_RATE_ECG)
+                    ecg_feat_base_l = extract_features_welch(ecg_base[:, 0], BANDS['Overall'], SAMPLING_RATE_ECG)
+                    ecg_feat_base_r = extract_features_welch(ecg_base[:, 1], BANDS['Overall'], SAMPLING_RATE_ECG)
                 # Average the two channels (each feature extraction returns a 1-element array)
                 ecg_feature = ((ecg_feat_stim_l - ecg_feat_base_l) + (ecg_feat_stim_r - ecg_feat_base_r)) / 2
 
@@ -674,16 +676,46 @@ def hyperparameter_tuning_dl(modality, feat_method, emotion_type):
 ###############################################
 # 10. Main Loop with Full Grid Search & Logging
 ###############################################
-def main():
-    results = []
-    modalities = ["EEG only", "Multimodal"] 
-    feat_methods = ["Welch", "FFT"] 
-    bands_dict = {
-        "EEG only": ['delta','theta','alpha', 'beta','gamma','overall'],
-        "Multimodal": ['overall']
-    }
+def main(args=None):
+    # Parse command line arguments if provided
+    if args is not None:
+        modality = "EEG only" if args.modality == "eeg_only" else "Multimodal"
+        feat_method = args.feat_method.upper()
+        bands = args.bands.split(',')
+        output_file = args.output
+        selected_models = args.models.split(',') if args.models else ["SVM", "RF", "Decision Tree", "CNN", "FCNN", "FCNN+Attention", "Domain-Adversarial Fuzzy", "GraphCNN"]
+
+        # Validate modality and band combinations
+        if modality == "Multimodal" and any(band != "Overall" for band in bands):
+            print("Warning: For Multimodal, only 'Overall' band is supported. Ignoring other bands.")
+            bands = ["Overall"]
+
+        print(f"Running with modality: {modality}, feature method: {feat_method}")
+        print(f"Selected bands: {', '.join(bands)}")
+        print(f"Selected models: {', '.join(selected_models)}")
+        print(f"Results will be saved to: {output_file}")
+
+        results = []
+        modalities = [modality]
+        feat_methods = [feat_method]
+        bands_dict = {
+            "EEG only": bands,
+            "Multimodal": ["Overall"]
+        }
+        model_names = selected_models
+    else:
+        # Use default configuration for complete run
+        results = []
+        modalities = ["EEG only", "Multimodal"] 
+        feat_methods = ["Welch", "FFT"] 
+        bands_dict = {
+            "EEG only": ['Delta','Theta','Alpha', 'Beta','Gamma','Overall'],
+            "Multimodal": ['Overall']
+        }
+        output_file = "restex.txt"
+        model_names = ["SVM", "RF", "Decision Tree", "CNN", "FCNN", "FCNN+Attention", "Domain-Adversarial Fuzzy", "GraphCNN"]
+
     emotion_types = ["Valence", "Arousal", "Dominance", "Targeted"] 
-    model_names = ["SVM", "RF", "Decision Tree", "CNN", "FCNN", "FCNN+Attention", "Domain-Adversarial Fuzzy", "GraphCNN"]
 
     # Hyperparameter grids for classical models
     svm_grid = {'C': [0.1, 1, 10], 'gamma': [0.001, 0.01]}
@@ -698,9 +730,9 @@ def main():
         for feat_method in feat_methods:
             for band in bands_dict[modality]:
                 for emotion_type in emotion_types:
-                    X, y, groups, num_classes = load_and_preprocess_data(modality, feat_method, band, emotion_type)
+                    X, y, groups, num_classes = load_and_preprocess_data(modality, feat_method, band, emotion_type, args.dreamer_mat)
                     for model_name in model_names:
-                        config_str = f"==={modality}, {feat_method}, {band}, {emotion_type}, {model_name}==="
+                        config_str = f"==={modality, feat_method, band, emotion_type, model_name}==="
                         print(config_str)
                         if model_name in ["SVM", "RF", "Decision Tree"]:
                             if model_name == "SVM":
@@ -735,12 +767,30 @@ def main():
 # Redirect output to both terminal and result.txt
 #################################################
 if __name__ == '__main__':
-    f = open("restex.txt", "w")
+    # Parse command-line arguments
+    parser = argparse.ArgumentParser(description='EEG Emotion Recognition with TensorFlow')
+    parser.add_argument('--modality', choices=['eeg_only', 'multimodal'], 
+                        default='eeg_only', help='Modality to use (eeg_only or multimodal)')
+    parser.add_argument('--feat_method', choices=['fft', 'welch'],
+                        default='fft', help='Feature extraction method (fft or welch)')
+    parser.add_argument('--bands', type=str, default='Overall', 
+                        help='Comma-separated list of bands to use (Delta,Theta,Alpha,Beta,Gamma,Overall)')
+    parser.add_argument('--output', type=str, default='results.txt',
+                        help='Output file path for results')
+    parser.add_argument('--models', type=str, default='',
+                        help='Comma-separated list of models to evaluate (SVM,RF,Decision Tree,CNN,FCNN,FCNN+Attention,Domain-Adversarial Fuzzy,GraphCNN)')
+    parser.add_argument('--dreamer_mat', type=str, default='DREAMER.mat',
+                        help='Path to the DREAMER.mat file')
+    
+    args = parser.parse_args()
+    
+    # Open output file and redirect stdout
+    f = open(args.output, "w")
     sys.stdout = Tee(sys.stdout, f)
-    # Run the main loop (if not already executed)
-    main()   # (The above loop is executed on script run)
-    # For hyperparameter tuning (on dl models, parameters can be changed)
-    # The tuning function goes through all the bands, and it does not include normal CNN
-    #hyperparameter_tuning_dl(modality="EEG only", feat_method="FFT", emotion_type="Targeted")
+    
+    # Run the main loop with arguments
+    main(args)
+    
+    # Restore stdout and close file
     sys.stdout = sys.__stdout__
     f.close()
