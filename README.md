@@ -42,7 +42,9 @@ python AIOtensorflow.py / python AIOpytorch.py
 ## ✅ To Do
 
 ✅ Adding GUI
+
 ✅ Adding pausing ability
+
 ✅ Adding in selection for which model to train
 
 - [ ] Add more modalities(need more datasets)
