@@ -230,7 +230,7 @@ class Executor(QMainWindow):
         self.apply_theme()
         
     def initUI(self):
-        self.setWindowTitle('EEG Emotion Recognition Models v1.0') 
+        self.setWindowTitle('EEG Emotion Recognition Models v2.0') 
         self.setGeometry(100, 100, 900, 700)
         
         # Main layout with tab widget
@@ -321,11 +321,11 @@ class Executor(QMainWindow):
         band_layout = QHBoxLayout()
         
         self.band_checkboxes = {}
-        bands = ["delta", "theta", "alpha", "beta", "gamma", "overall"]
+        bands = ["Delta", "Theta", "Alpha", "Beta", "Gamma", "Overall"]
         
         for band in bands:
             checkbox = QCheckBox(band)
-            if band == "overall":
+            if band == "Overall":
                 checkbox.setChecked(True)  # Default to overall
             self.band_checkboxes[band] = checkbox
             band_layout.addWidget(checkbox)
@@ -660,6 +660,9 @@ class Executor(QMainWindow):
         self.statusBar.showMessage(f'Running {framework.capitalize()} implementation...')
         self.running = True
         
+        # Create stop event for the process monitor
+        self.stop_monitor = threading.Event()
+        
         # Redirect stdout/stderr
         sys.stdout = self.stdout_redirector
         sys.stderr = self.stderr_redirector
@@ -683,6 +686,11 @@ class Executor(QMainWindow):
                 
                 # Log the start of this specific combination
                 self.terminal.append(f"Starting combination: {modality} + {feat_method} -> {combination_output}\n")
+                
+        # Start a monitor thread to detect process termination
+        self.monitor_thread = threading.Thread(target=self.monitor_process)
+        self.monitor_thread.daemon = True
+        self.monitor_thread.start()
     
     def run_script(self, script_path, output_file, modality, feat_method, selected_bands):
         """Execute the script in a subprocess."""
@@ -738,6 +746,13 @@ class Executor(QMainWindow):
                     # These exceptions can occur if the process is terminated
                     is_canceled = True
                     self.terminal.append(f"\n*** Output processing interrupted: {str(e)} ***\n")
+                
+                # Check if process is still running - it may have exited with error
+                if process_ref.poll() is not None:
+                    return_code = process_ref.returncode
+                    if return_code != 0:
+                        self.terminal.append(f"\n*** Process exited with error code {return_code} ***\n")
+                        self.reset_execution_state()
             
             # Only wait on the process if it wasn't canceled and still exists
             if not is_canceled and self.process is not None:
@@ -753,15 +768,15 @@ class Executor(QMainWindow):
             
         except Exception as e:
             self.update_status(f"Error: {str(e)}")
+            self.terminal.append(f"\n*** Exception occurred: {str(e)} ***\n")
+            # Reset execution state on exception
+            self.reset_execution_state()
         finally:
             # Check if all threads are completed
             active_threads = [t for t in self.execution_threads if t.is_alive()]
             if not active_threads:
-                # Reset stdout/stderr only when all threads are done
-                sys.stdout = self.original_stdout
-                sys.stderr = self.original_stderr
-                
-                # Update UI state
+                # Reset the state if all threads are done
+                self.reset_execution_state()
                 self.update_ui_after_execution()
     
     def update_status(self, message):
@@ -917,6 +932,43 @@ class Executor(QMainWindow):
                 self.terminal.append("\n*** Resuming execution. Process continuing... ***\n")
             except Exception as e:
                 self.terminal.append(f"\n*** Error resuming execution: {str(e)} ***\n")
+
+    def reset_execution_state(self):
+        """Reset the execution state after script completion or error."""
+        # Set running flag to false
+        self.running = False
+        
+        # Reset process reference
+        self.process = None
+        
+        # Reset pause state
+        self.paused = False
+        self.pause_event.set()
+        self.pause_button.setText("Pause")
+        
+        # Update UI elements
+        self.start_button.setEnabled(True)
+        self.pause_button.setEnabled(False)
+        self.cancel_button.setEnabled(False)
+        self.progress_bar.setVisible(False)
+        
+        # Reset stdout/stderr redirections
+        sys.stdout = self.original_stdout
+        sys.stderr = self.original_stderr
+        
+        # Force garbage collection
+        import gc
+        gc.collect()
+
+    def monitor_process(self):
+        """Monitor the process and update UI when it terminates."""
+        while not self.stop_monitor.is_set():
+            if self.process and self.process.poll() is not None:
+                self.update_status("Process terminated")
+                self.reset_execution_state()
+                self.update_ui_after_execution()
+                break
+            self.stop_monitor.wait(1)
 
 
 class StatusUpdateEvent(QEvent):
