@@ -1,4 +1,4 @@
-# EEG-Emotion-Models-GUI implementation branch
+# EEG-Emotion-Models
 ----------------------------------------------------------------------
 
 # 🧠 EEG Emotion Recognition Models
