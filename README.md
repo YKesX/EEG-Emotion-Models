@@ -21,6 +21,7 @@ This open-source project blends computational neuroscience and machine learning 
 
 ## 🛠️ Installation & Usage
 Install and unpack the latest release
+
 (For Linux users)
 ```bash
 chmod +x EEG-Emotion-Recognition.sh
