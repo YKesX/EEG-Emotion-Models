@@ -9,9 +9,9 @@ This application provides a graphical interface to:
 - Choose feature extraction method (FFT or Welch, or both)
 - Select frequency bands (delta, theta, alpha, beta, gamma, overall)
 - Select models to train
-- Set preferences (dark/light mode, output file path)
+- Set preferences (dark/light mode, input/output file path)
 - Monitor script execution in real-time
-- Start and cancel script execution
+- Start, pause and cancel script execution
 """
 
 import sys
@@ -19,6 +19,7 @@ import os
 import subprocess
 import threading
 import json
+import psutil  # Added for process management
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QRadioButton, QButtonGroup, QPushButton, QLabel, QLineEdit,
@@ -208,6 +209,9 @@ class Executor(QMainWindow):
         self.process = None
         self.execution_thread = None
         self.running = False
+        self.paused = False  # Flag to track pause state
+        self.pause_event = threading.Event()  # Event to signal pause/resume
+        self.pause_event.set()  # Not paused by default
         self.preferences_file = os.path.join(
             os.path.dirname(os.path.abspath(__file__)), 
             "eeg_emorec_preferences.json"
@@ -215,6 +219,7 @@ class Executor(QMainWindow):
         self.dark_mode = True  # Default to dark mode
         self.selected_models = ["SVM", "RF", "Decision Tree", "CNN", "FCNN", 
                                 "FCNN+Attention", "Domain-Adversarial Fuzzy", "GraphCNN"]
+        self.dreamer_mat_path = "DREAMER.mat"
         self.output_path = os.path.join(
             os.path.dirname(os.path.abspath(__file__)), 
             "results", 
@@ -225,7 +230,7 @@ class Executor(QMainWindow):
         self.apply_theme()
         
     def initUI(self):
-        self.setWindowTitle('EEG Emotion Recognition Models v1.0') 
+        self.setWindowTitle('EEG Emotion Recognition Models v2.0') 
         self.setGeometry(100, 100, 900, 700)
         
         # Main layout with tab widget
@@ -316,11 +321,11 @@ class Executor(QMainWindow):
         band_layout = QHBoxLayout()
         
         self.band_checkboxes = {}
-        bands = ["delta", "theta", "alpha", "beta", "gamma", "overall"]
+        bands = ["Delta", "Theta", "Alpha", "Beta", "Gamma", "Overall"]
         
         for band in bands:
             checkbox = QCheckBox(band)
-            if band == "overall":
+            if band == "Overall":
                 checkbox.setChecked(True)  # Default to overall
             self.band_checkboxes[band] = checkbox
             band_layout.addWidget(checkbox)
@@ -381,6 +386,10 @@ class Executor(QMainWindow):
         self.start_button = QPushButton("Start")
         self.start_button.clicked.connect(self.start_script)
         
+        self.pause_button = QPushButton("Pause")
+        self.pause_button.clicked.connect(self.toggle_pause)
+        self.pause_button.setEnabled(False)
+        
         self.cancel_button = QPushButton("Cancel")
         self.cancel_button.clicked.connect(self.cancel_script)
         self.cancel_button.setEnabled(False)
@@ -389,6 +398,7 @@ class Executor(QMainWindow):
         exit_button.clicked.connect(self.close)
         
         button_layout.addWidget(self.start_button)
+        button_layout.addWidget(self.pause_button)
         button_layout.addWidget(self.cancel_button)
         button_layout.addStretch(1)
         button_layout.addWidget(exit_button)
@@ -428,6 +438,20 @@ class Executor(QMainWindow):
         theme_layout.addWidget(self.light_radio)
         theme_group.setLayout(theme_layout)
         
+        # DREAMER.mat file selection
+        dreamer_group = QGroupBox("DREAMER.mat File")
+        dreamer_layout = QHBoxLayout()
+        
+        self.dreamer_path_field = QLineEdit()
+        self.dreamer_path_field.setText(self.dreamer_mat_path)
+        
+        dreamer_browse_button = QPushButton("Browse...")
+        dreamer_browse_button.clicked.connect(self.browse_dreamer_file)
+        
+        dreamer_layout.addWidget(self.dreamer_path_field)
+        dreamer_layout.addWidget(dreamer_browse_button)
+        dreamer_group.setLayout(dreamer_layout)
+        
         # Output file selection - moved from main tab to preferences tab
         output_group = QGroupBox("Output File")
         output_layout = QHBoxLayout()
@@ -448,6 +472,7 @@ class Executor(QMainWindow):
         
         # Add groups to preferences layout
         preferences_layout.addWidget(theme_group)
+        preferences_layout.addWidget(dreamer_group)
         preferences_layout.addWidget(output_group)
         preferences_layout.addWidget(save_button)
         preferences_layout.addStretch(1)  # Add stretch to push everything to the top
@@ -486,13 +511,15 @@ class Executor(QMainWindow):
     def save_preferences(self):
         """Save preferences to a JSON file."""
         try:
-            # Update output path from the field
+            # Update paths from the fields
             self.output_path = self.output_path_field.text()
+            self.dreamer_mat_path = self.dreamer_path_field.text()
             
             preferences = {
                 "dark_mode": self.dark_mode,
                 "selected_models": self.selected_models,
-                "output_path": self.output_path
+                "output_path": self.output_path,
+                "dreamer_mat_path": self.dreamer_mat_path
             }
             
             with open(self.preferences_file, 'w') as f:
@@ -514,6 +541,7 @@ class Executor(QMainWindow):
                                                       ["SVM", "RF", "Decision Tree", "CNN", "FCNN", 
                                                        "FCNN+Attention", "Domain-Adversarial Fuzzy", "GraphCNN"])
                 self.output_path = preferences.get("output_path", self.output_path)
+                self.dreamer_mat_path = preferences.get("dreamer_mat_path", "DREAMER.mat")
         except Exception as e:
             print(f"Error loading preferences: {str(e)}")
     
@@ -525,6 +553,15 @@ class Executor(QMainWindow):
             self.output_path_field.setText(file_path)
             self.output_path = file_path
             self.statusBar.showMessage(f'Output file set to {file_path}')
+    
+    def browse_dreamer_file(self):
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "Select DREAMER.mat File", self.dreamer_path_field.text(),
+            "MAT Files (*.mat);;All Files (*)")
+        if file_path:
+            self.dreamer_path_field.setText(file_path)
+            self.dreamer_mat_path = file_path
+            self.statusBar.showMessage(f'DREAMER.mat file set to {file_path}')
     
     @pyqtSlot(str)
     def update_terminal(self, text):
@@ -617,10 +654,14 @@ class Executor(QMainWindow):
         
         # Update UI state
         self.start_button.setEnabled(False)
+        self.pause_button.setEnabled(True)
         self.cancel_button.setEnabled(True)
         self.progress_bar.setVisible(True)
         self.statusBar.showMessage(f'Running {framework.capitalize()} implementation...')
         self.running = True
+        
+        # Create stop event for the process monitor
+        self.stop_monitor = threading.Event()
         
         # Redirect stdout/stderr
         sys.stdout = self.stdout_redirector
@@ -645,6 +686,11 @@ class Executor(QMainWindow):
                 
                 # Log the start of this specific combination
                 self.terminal.append(f"Starting combination: {modality} + {feat_method} -> {combination_output}\n")
+                
+        # Start a monitor thread to detect process termination
+        self.monitor_thread = threading.Thread(target=self.monitor_process)
+        self.monitor_thread.daemon = True
+        self.monitor_thread.start()
     
     def run_script(self, script_path, output_file, modality, feat_method, selected_bands):
         """Execute the script in a subprocess."""
@@ -657,7 +703,8 @@ class Executor(QMainWindow):
                 "--feat_method", feat_method,
                 "--bands", ",".join(selected_bands),
                 "--output", output_file,
-                "--models", ",".join(self.selected_models)
+                "--models", ",".join(self.selected_models),
+                "--dreamer_mat", self.dreamer_mat_path
             ]
             
             # Execute the script
@@ -670,31 +717,66 @@ class Executor(QMainWindow):
                 cwd=os.path.dirname(script_path)
             )
             
+            # Flag to track if we're canceled
+            is_canceled = False
+            
             # Capture and redirect output
             with open(output_file, 'w', encoding='utf-8') as f:
-                for line in self.process.stdout:
-                    if line:
-                        print(line, end='')  # This will go through our redirector
-                        f.write(line)
-                        f.flush()
-            
-            return_code = self.process.wait()
-            if return_code == 0:
-                self.update_status(f"Script completed successfully: {os.path.basename(output_file)}")
-            else:
-                self.update_status(f"Script exited with code {return_code}: {os.path.basename(output_file)}")
+                # Store a local reference to the process to avoid NoneType issues
+                process_ref = self.process
+                if process_ref is None:  # Process was already canceled
+                    is_canceled = True
+                    return
+                    
+                try:
+                    for line in process_ref.stdout:
+                        # Check if process was canceled or set to None
+                        if self.process is None:
+                            is_canceled = True
+                            break
+                            
+                        # Check for pause event - if cleared, wait until set
+                        self.pause_event.wait()
+                        
+                        if line:
+                            print(line, end='')  # This will go through our redirector
+                            f.write(line)
+                            f.flush()
+                except (ValueError, IOError, BrokenPipeError) as e:
+                    # These exceptions can occur if the process is terminated
+                    is_canceled = True
+                    self.terminal.append(f"\n*** Output processing interrupted: {str(e)} ***\n")
                 
+                # Check if process is still running - it may have exited with error
+                if process_ref.poll() is not None:
+                    return_code = process_ref.returncode
+                    if return_code != 0:
+                        self.terminal.append(f"\n*** Process exited with error code {return_code} ***\n")
+                        self.reset_execution_state()
+            
+            # Only wait on the process if it wasn't canceled and still exists
+            if not is_canceled and self.process is not None:
+                try:
+                    return_code = process_ref.wait()
+                    if return_code == 0:
+                        self.update_status(f"Script completed successfully: {os.path.basename(output_file)}")
+                    else:
+                        self.update_status(f"Script exited with code {return_code}: {os.path.basename(output_file)}")
+                except (ValueError, AttributeError) as e:
+                    # Process was terminated or is None
+                    self.terminal.append(f"\n*** Process was terminated: {str(e)} ***\n")
+            
         except Exception as e:
             self.update_status(f"Error: {str(e)}")
+            self.terminal.append(f"\n*** Exception occurred: {str(e)} ***\n")
+            # Reset execution state on exception
+            self.reset_execution_state()
         finally:
             # Check if all threads are completed
             active_threads = [t for t in self.execution_threads if t.is_alive()]
             if not active_threads:
-                # Reset stdout/stderr only when all threads are done
-                sys.stdout = self.original_stdout
-                sys.stderr = self.original_stderr
-                
-                # Update UI state
+                # Reset the state if all threads are done
+                self.reset_execution_state()
                 self.update_ui_after_execution()
     
     def update_status(self, message):
@@ -707,18 +789,64 @@ class Executor(QMainWindow):
         QApplication.postEvent(self, UIUpdateEvent())
     
     def cancel_script(self):
-        """Cancel the running script."""
-        if self.process and self.running:
-            self.process.terminate()
+        """Cancel the running script and properly clean up resources."""
+        if not self.running:
+            return
+            
+        try:
+            if self.process:
+                # Get the process ID
+                pid = self.process.pid
+                
+                # Kill the process and any child processes
+                parent = psutil.Process(pid)
+                for child in parent.children(recursive=True):
+                    try:
+                        child.kill()
+                    except psutil.NoSuchProcess:
+                        pass
+                
+                # Kill the parent process
+                try:
+                    parent.kill()
+                except psutil.NoSuchProcess:
+                    pass
+                    
+                self.process = None
+            
+            # Clear pause event to allow any waiting threads to proceed and terminate
+            self.pause_event.set()
+            
+            # Wait for a short time for threads to clean up
             self.terminal.append("\n\n*** Script execution canceled by user ***\n")
             self.update_status("Execution canceled")
             
-            # No need to update UI here as it will be handled
-            # when the process terminates in the run_script method
-    
+            # Reset state immediately
+            self.start_button.setEnabled(True)
+            self.pause_button.setEnabled(False)
+            self.cancel_button.setEnabled(False)
+            self.progress_bar.setVisible(False)
+            self.running = False
+            self.paused = False
+            self.pause_button.setText("Pause")
+            
+            # Reset stdout/stderr
+            sys.stdout = self.original_stdout
+            sys.stderr = self.original_stderr
+            
+        except Exception as e:
+            self.terminal.append(f"\n\n*** Error during cancellation: {str(e)} ***\n")
+
+        # Force garbage collection to free memory
+        import gc
+        gc.collect()
+        
+        self.statusBar.showMessage("Ready")    
+        
     def handle_ui_update(self):
         """Handle UI updates after script execution."""
         self.start_button.setEnabled(True)
+        self.pause_button.setEnabled(False)
         self.cancel_button.setEnabled(False)
         self.progress_bar.setVisible(False)
         self.running = False
@@ -756,6 +884,91 @@ class Executor(QMainWindow):
                 event.ignore()
         else:
             event.accept()
+
+    def toggle_pause(self):
+        """Toggle between pause and resume states for the running process."""
+        if not self.running or not self.process:
+            return
+            
+        self.paused = not self.paused
+        
+        if self.paused:
+            # Pause execution - actually suspend the process
+            try:
+                # Get the process and all children
+                parent = psutil.Process(self.process.pid)
+                processes = [parent] + parent.children(recursive=True)
+                
+                # Suspend all processes
+                for proc in processes:
+                    try:
+                        proc.suspend()
+                    except (psutil.NoSuchProcess, psutil.AccessDenied) as e:
+                        self.terminal.append(f"\n*** Warning: Could not suspend process {proc.pid}: {str(e)} ***\n")
+                
+                self.pause_event.clear()  # Also block the output reading thread
+                self.pause_button.setText("Resume")
+                self.statusBar.showMessage("Execution paused")
+                self.terminal.append("\n*** Execution paused. Process suspended. Click Resume to continue ***\n")
+            except Exception as e:
+                self.terminal.append(f"\n*** Error pausing execution: {str(e)} ***\n")
+        else:
+            # Resume execution - resume the suspended process
+            try:
+                # Get the process and all children
+                parent = psutil.Process(self.process.pid)
+                processes = [parent] + parent.children(recursive=True)
+                
+                # Resume all processes
+                for proc in processes:
+                    try:
+                        proc.resume()
+                    except (psutil.NoSuchProcess, psutil.AccessDenied) as e:
+                        self.terminal.append(f"\n*** Warning: Could not resume process {proc.pid}: {str(e)} ***\n")
+                
+                self.pause_event.set()  # Unblock the output reading thread
+                self.pause_button.setText("Pause")
+                self.statusBar.showMessage("Execution resumed")
+                self.terminal.append("\n*** Resuming execution. Process continuing... ***\n")
+            except Exception as e:
+                self.terminal.append(f"\n*** Error resuming execution: {str(e)} ***\n")
+
+    def reset_execution_state(self):
+        """Reset the execution state after script completion or error."""
+        # Set running flag to false
+        self.running = False
+        
+        # Reset process reference
+        self.process = None
+        
+        # Reset pause state
+        self.paused = False
+        self.pause_event.set()
+        self.pause_button.setText("Pause")
+        
+        # Update UI elements
+        self.start_button.setEnabled(True)
+        self.pause_button.setEnabled(False)
+        self.cancel_button.setEnabled(False)
+        self.progress_bar.setVisible(False)
+        
+        # Reset stdout/stderr redirections
+        sys.stdout = self.original_stdout
+        sys.stderr = self.original_stderr
+        
+        # Force garbage collection
+        import gc
+        gc.collect()
+
+    def monitor_process(self):
+        """Monitor the process and update UI when it terminates."""
+        while not self.stop_monitor.is_set():
+            if self.process and self.process.poll() is not None:
+                self.update_status("Process terminated")
+                self.reset_execution_state()
+                self.update_ui_after_execution()
+                break
+            self.stop_monitor.wait(1)
 
 
 class StatusUpdateEvent(QEvent):
