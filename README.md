@@ -31,8 +31,11 @@ chmod +x EEG-Emotion-Recognition.sh
 chmod +x EEG-Emotion-Recognition.command
 ```
 Then simply run your launcher script according to your operating system.
+
 ->EEG-Emotion-Recognition.command    # For macOS
+
 ->EEG-Emotion-Recognition.sh         # For Linux
+
 ->EEG-Emotion-Recognition.bat        # For Windows
 
 If you want to do everything from scratch
